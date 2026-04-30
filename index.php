@@ -45,8 +45,9 @@ $router->get('/', function () {
 // 라우트 등록 (순서 중요)
 require_once __DIR__ . '/routers/auth.php';
 require_once __DIR__ . '/routers/users.php';
-require_once __DIR__ . '/routers/products.php';
+require_once __DIR__ . '/routers/product.php';
 require_once __DIR__ . '/routers/banners.php';
+require_once __DIR__ . '/routers/share.php';
 require_once __DIR__ . '/routers/download.php';
 
 // ===== 디스패치 =====

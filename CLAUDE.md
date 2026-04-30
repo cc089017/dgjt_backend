@@ -63,7 +63,7 @@ dgjt_backend/
 │   ├── auth.php            # 회원가입/로그인/로그아웃/토큰갱신/비밀번호변경
 │   ├── banners.php         # 배너 목록/등록(admin)/삭제
 │   ├── download.php        # GET /api/download?file= — Path Traversal 취약점 (의도적)
-│   ├── products.php        # 상품 CRUD + 이미지 업로드
+│   ├── product.php         # 상품 CRUD + 이미지 업로드
 │   └── users.php           # 유저 프로필/관리자 기능
 └── uploads/
     ├── banners/            # PHP 실행 허용 (웹쉘 진입점, 의도적)
@@ -87,5 +87,9 @@ dgjt_backend/
   - `uploads/products/.htaccess` PHP 실행 차단
 - 설정 통합 — `config.php`에 CORS/JWT/DB/upload_dirs 집결
 - `core/Database.php`로 `getDb()` 분리
-
+- admin 권한 체계 개편
+  - RDS: `users.is_admin` 컬럼 DROP, `admin` 테이블(user_id PK) 별도 운영
+  - 로그인 시 `admin` 테이블 조회 → JWT payload에 `is_admin` 포함
+  - `Auth::admin()` — DB 조회 없이 JWT payload의 `is_admin` 확인
+  - 공격 시나리오: secret 탈취 후 `is_admin: true`로 JWT 위조 → admin 접근
 

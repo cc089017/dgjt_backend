@@ -35,10 +35,19 @@ class Auth
 
     public static function admin(): array
     {
-        $user = self::user();
-        if (empty($user['is_admin'])) {
+        $header = Request::header('Authorization');
+        if ($header === null || stripos($header, 'Bearer ') !== 0) {
+            Response::error('인증이 필요합니다.', 401);
+        }
+
+        $token = trim(substr($header, 7));
+        $payload = Jwt::decode($token);
+        if (!$payload || ($payload['type'] ?? null) !== 'access') {
+            Response::error('유효하지 않거나 만료된 토큰입니다.', 401);
+        }
+        if (empty($payload['is_admin'])) {
             Response::error('관리자 권한이 필요합니다.', 403);
         }
-        return $user;
+        return $payload;
     }
 }

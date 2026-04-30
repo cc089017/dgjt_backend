@@ -45,7 +45,6 @@ if (!function_exists('isValidProductImage')) {
 
 // 상품 목록
 $router->get('/api/products', function () {
-    $category = Request::query('category');
     $search   = Request::query('search');
     $minPrice = Request::query('min_price');
     $maxPrice = Request::query('max_price');
@@ -56,9 +55,6 @@ $router->get('/api/products', function () {
     if ($limit > 100) $limit = 100;
 
     $sql = "SELECT * FROM product WHERE 1=1";
-    if ($category !== null && $category !== '') {
-        $sql .= " AND category = '{$category}'";
-    }
     if ($search !== null && $search !== '') {
         $sql .= " AND (product_title LIKE '%{$search}%' OR product_body LIKE '%{$search}%')";
     }
@@ -85,10 +81,9 @@ $router->post('/api/products', function () {
     $current = Auth::user();
     $body = Request::jsonBody();
 
-    $title    = (string)($body['product_title'] ?? '');
-    $bodyTxt  = (string)($body['product_body']  ?? '');
-    $price    = (int)($body['product_price']    ?? 0);
-    $category = (string)($body['category']      ?? '');
+    $title   = (string)($body['product_title'] ?? '');
+    $bodyTxt = (string)($body['product_body']  ?? '');
+    $price   = (int)($body['product_price']    ?? 0);
 
     if ($title === '') {
         Response::error('상품명은 필수입니다.', 400);
@@ -96,8 +91,8 @@ $router->post('/api/products', function () {
 
     $db = getDb();
     $db->exec(
-        "INSERT INTO product (user_id, product_title, product_body, product_price, category) "
-        . "VALUES ('{$current['user_id']}', '{$title}', '{$bodyTxt}', {$price}, '{$category}')"
+        "INSERT INTO product (user_id, product_title, product_body, product_price) "
+        . "VALUES ('{$current['user_id']}', '{$title}', '{$bodyTxt}', {$price})"
     );
     $productId = (int)$db->lastInsertId();
 
@@ -207,7 +202,7 @@ $router->patch('/api/products/{product_id}', function (string $productId) {
         Response::error('수정 권한이 없습니다.', 403);
     }
 
-    $allowed = ['product_title', 'product_body', 'product_price', 'category'];
+    $allowed = ['product_title', 'product_body', 'product_price'];
     $sets = [];
     foreach ($allowed as $key) {
         if (array_key_exists($key, $body)) {
@@ -316,27 +311,4 @@ $router->patch('/api/products/{product_id}/status', function (string $productId)
     $updated = $db->query("SELECT * FROM product WHERE product_id = {$pid}")->fetch();
     $updated['thumbnail_url'] = fetchThumbnail($db, $pid);
     Response::json($updated);
-});
-
-// 연관 상품
-$router->get('/api/products/{product_id}/related', function (string $productId) {
-    $pid = (int)$productId;
-    $limit = (int)(Request::query('limit', 5));
-    if ($limit < 1) $limit = 1;
-    if ($limit > 50) $limit = 50;
-
-    $db = getDb();
-    $target = $db->query("SELECT * FROM product WHERE product_id = {$pid}")->fetch();
-    if (!$target) {
-        Response::error('상품을 찾을 수 없습니다.', 404);
-    }
-    $cat = (string)$target['category'];
-    $related = $db->query(
-        "SELECT * FROM product WHERE category = '{$cat}' AND product_id != {$pid} LIMIT {$limit}"
-    )->fetchAll();
-
-    foreach ($related as &$p) {
-        $p['thumbnail_url'] = fetchThumbnail($db, (int)$p['product_id']);
-    }
-    Response::json($related);
 });

@@ -8,43 +8,12 @@ $router->get('/api/users', function () {
     Auth::admin();
     $db = getDb();
     $users = $db->query("SELECT * FROM users")->fetchAll();
-    foreach ($users as &$u) {
-        if (isset($u['is_admin'])) {
-            $u['is_admin'] = (bool)$u['is_admin'];
-        }
-    }
     Response::json($users);
-});
-
-// 관리자 권한 토글
-$router->patch('/api/users/{user_id}/admin', function (string $userId) {
-    $current = Auth::admin();
-
-    $db = getDb();
-    $user = $db->query("SELECT * FROM users WHERE user_id = '{$userId}'")->fetch();
-    if (!$user) {
-        Response::error('사용자를 찾을 수 없습니다.', 404);
-    }
-    if ($user['user_id'] === $current['user_id']) {
-        Response::error('본인의 관리자 권한은 변경할 수 없습니다.', 400);
-    }
-
-    $newAdmin = empty($user['is_admin']) ? 1 : 0;
-    $db->exec("UPDATE users SET is_admin = {$newAdmin} WHERE user_id = '{$userId}'");
-
-    $updated = $db->query("SELECT * FROM users WHERE user_id = '{$userId}'")->fetch();
-    if ($updated && isset($updated['is_admin'])) {
-        $updated['is_admin'] = (bool)$updated['is_admin'];
-    }
-    Response::json($updated);
 });
 
 // 내 프로필
 $router->get('/api/users/me', function () {
     $user = Auth::user();
-    if (isset($user['is_admin'])) {
-        $user['is_admin'] = (bool)$user['is_admin'];
-    }
     Response::json($user);
 });
 
@@ -69,9 +38,6 @@ $router->patch('/api/users/me', function () {
     }
 
     $updated = $db->query("SELECT * FROM users WHERE user_id = '{$current['user_id']}'")->fetch();
-    if ($updated && isset($updated['is_admin'])) {
-        $updated['is_admin'] = (bool)$updated['is_admin'];
-    }
     Response::json($updated);
 });
 
@@ -89,9 +55,6 @@ $router->get('/api/users/{user_id}', function (string $userId) {
     $user = $db->query("SELECT * FROM users WHERE user_id = '{$userId}'")->fetch();
     if (!$user) {
         Response::error('유저를 찾을 수 없습니다.', 404);
-    }
-    if (isset($user['is_admin'])) {
-        $user['is_admin'] = (bool)$user['is_admin'];
     }
     Response::json($user);
 });

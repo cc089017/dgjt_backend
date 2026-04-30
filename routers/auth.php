@@ -47,7 +47,8 @@ $router->post('/api/auth/login', function () {
         Response::error('아이디 또는 비밀번호가 올바르지 않습니다.', 401);
     }
 
-    $accessToken  = Jwt::createAccessToken((string)$user['user_id']);
+    $isAdmin = (bool)$db->query("SELECT user_id FROM admin WHERE user_id = '{$user['user_id']}'")->fetch();
+    $accessToken  = Jwt::createAccessToken((string)$user['user_id'], $isAdmin);
     $refreshToken = Jwt::createRefreshToken((string)$user['user_id']);
 
     $expiresAt = date('Y-m-d H:i:s', time() + config('jwt')['refresh_expire']);

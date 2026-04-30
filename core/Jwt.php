@@ -8,13 +8,14 @@ class Jwt
         return config('jwt')['secret'];
     }
 
-    public static function createAccessToken(string $userId): string
+    public static function createAccessToken(string $userId, bool $isAdmin = false): string
     {
         return self::encode([
-            'sub'  => $userId,
-            'type' => 'access',
-            'iat'  => time(),
-            'exp'  => time() + config('jwt')['access_expire'],
+            'sub'      => $userId,
+            'type'     => 'access',
+            'is_admin' => $isAdmin,
+            'iat'      => time(),
+            'exp'      => time() + config('jwt')['access_expire'],
         ]);
     }
 
