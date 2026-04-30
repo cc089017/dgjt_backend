@@ -1,24 +1,21 @@
 <?php
 declare(strict_types=1);
 
-<<<<<<< HEAD
 // ===== CORS =====
-$allowedOrigins = [
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-    'http://localhost:5174',
-    'http://127.0.0.1:5174',
-    'http://localhost:5175',
-    'http://127.0.0.1:5175',
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    'http://bgdgnara.duckdns.org',
-    'https://bgdgnara.duckdns.org',
-];
-=======
+// $allowedOrigins = [
+//     'http://localhost:5173',
+//     'http://127.0.0.1:5173',
+//     'http://localhost:5174',
+//     'http://127.0.0.1:5174',
+//     'http://localhost:5175',
+//     'http://127.0.0.1:5175',
+//     'http://localhost:3000',
+//     'http://127.0.0.1:3000',
+//     'http://bgdgnara.duckdns.org',
+//     'https://bgdgnara.duckdns.org',
+// ];
 // ===== 설정 로드 =====
 require_once __DIR__ . '/config.php';
->>>>>>> 6d037a1835c797ab531e16220eeabefcb903edd2
 
 // ===== CORS =====
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
