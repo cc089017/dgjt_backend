@@ -3,16 +3,6 @@ declare(strict_types=1);
 
 /** @var Router $router */
 
-if (!function_exists('uuidv4')) {
-    function uuidv4(): string
-    {
-        $data = random_bytes(16);
-        $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
-        $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
-        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
-    }
-}
-
 // 활성 배너 목록
 $router->get('/api/banners', function () {
     $db = getDb();
@@ -41,12 +31,10 @@ $router->post('/api/banners', function () {
     $ext = strtolower(pathinfo((string)$image['name'], PATHINFO_EXTENSION));
     if ($ext === '') $ext = 'jpg';
 
-    $filename  = uuidv4() . '.' . $ext;
-    $bannerDir = __DIR__ . '/../uploads/banners';
-    if (!is_dir($bannerDir)) {
-        @mkdir($bannerDir, 0755, true);
-    }
-    $savePath = $bannerDir . '/' . $filename;
+    $basename  = pathinfo((string)$image['name'], PATHINFO_FILENAME);
+    $filename  = date('Ymd') . '_' . md5($basename) . '.' . $ext;
+    $bannerDir = config('upload_dirs')['banners'];
+    $savePath  = $bannerDir . '/' . $filename;
 
     if (!move_uploaded_file($image['tmp_name'], $savePath)) {
         Response::error('파일 저장 실패', 500);

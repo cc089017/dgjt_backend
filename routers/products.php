@@ -9,10 +9,10 @@ if (!function_exists('fetchThumbnail')) {
     function fetchThumbnail(PDO $db, int $productId): ?string
     {
         $img = $db->query(
-            "SELECT image_order FROM product_image WHERE product_id = {$productId} "
+            "SELECT image_url FROM product_image WHERE product_id = {$productId} "
             . "ORDER BY image_order LIMIT 1"
         )->fetch();
-        return $img ? "/products/{$productId}/images/{$img['image_order']}" : null;
+        return $img ? $img['image_url'] : null;
     }
 }
 
@@ -157,16 +157,13 @@ $router->get('/api/products/{product_id}', function (string $productId) {
     }
 
     $images = $db->query(
-        "SELECT image_order FROM product_image WHERE product_id = {$pid} ORDER BY image_order"
+        "SELECT image_url FROM product_image WHERE product_id = {$pid} ORDER BY image_order"
     )->fetchAll();
 
     $sellerId = (string)$product['user_id'];
     $seller = $db->query("SELECT nickname, region FROM users WHERE user_id = '{$sellerId}'")->fetch();
 
-    $imageUrls = [];
-    foreach ($images as $img) {
-        $imageUrls[] = "/products/{$pid}/images/{$img['image_order']}";
-    }
+    $imageUrls = array_column($images, 'image_url');
 
     $product['thumbnail_url']   = $imageUrls[0] ?? null;
     $product['seller_nickname'] = $seller['nickname'] ?? '';
@@ -185,42 +182,14 @@ $router->get('/api/products/{product_id}/images', function (string $productId) {
         Response::error('상품을 찾을 수 없습니다.', 404);
     }
     $images = $db->query(
-        "SELECT image_order FROM product_image WHERE product_id = {$pid} ORDER BY image_order"
+        "SELECT image_order, image_url FROM product_image WHERE product_id = {$pid} ORDER BY image_order"
     )->fetchAll();
-
-    $orders = [];
-    $urls   = [];
-    foreach ($images as $img) {
-        $orders[] = (int)$img['image_order'];
-        $urls[]   = "/products/{$pid}/images/{$img['image_order']}";
-    }
 
     Response::json([
         'product_id'   => $pid,
-        'image_orders' => $orders,
-        'image_urls'   => $urls,
+        'image_orders' => array_column($images, 'image_order'),
+        'image_urls'   => array_column($images, 'image_url'),
     ]);
-});
-
-// 이미지 바이너리 서빙
-$router->get('/api/products/{product_id}/images/{image_order}', function (string $productId, string $imageOrder) {
-    $pid   = (int)$productId;
-    $order = (int)$imageOrder;
-
-    $db = getDb();
-    $img = $db->query(
-        "SELECT image_data FROM product_image "
-        . "WHERE product_id = {$pid} AND image_order = {$order}"
-    )->fetch();
-    if (!$img) {
-        Response::error('이미지를 찾을 수 없습니다.', 404);
-    }
-
-    $data = $img['image_data'];
-    if (is_resource($data)) {
-        $data = stream_get_contents($data);
-    }
-    Response::binary((string)$data, 'image/jpeg');
 });
 
 // 상품 수정
@@ -298,6 +267,8 @@ $router->post('/api/products/{product_id}/images', function (string $productId) 
         Response::error('업로드할 파일이 없습니다.', 400);
     }
 
+    $uploadDir = config('upload_dirs')['products'];
+
     foreach ($files as $idx => $file) {
         if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
             Response::error('파일 업로드 실패', 400);
@@ -309,11 +280,16 @@ $router->post('/api/products/{product_id}/images', function (string $productId) 
         if (!isValidProductImage($content, (string)($file['type'] ?? ''), (string)($file['name'] ?? ''))) {
             Response::error('이미지 파일만 업로드할 수 있습니다.', 400);
         }
-        // BLOB 직접 삽입: 16진수 리터럴(0x...) 사용 (prepared statement 미사용)
-        $hex = bin2hex($content);
+
+        $ext      = strtolower(pathinfo((string)$file['name'], PATHINFO_EXTENSION));
+        $basename = pathinfo((string)$file['name'], PATHINFO_FILENAME);
+        $filename = date('Ymd') . '_' . md5($basename) . '.' . $ext;
+        move_uploaded_file($file['tmp_name'], $uploadDir . '/' . $filename);
+
+        $imageUrl = '/uploads/products/' . $filename;
         $db->exec(
-            "INSERT INTO product_image (product_id, image_data, image_order) "
-            . "VALUES ({$pid}, 0x{$hex}, {$idx})"
+            "INSERT INTO product_image (product_id, image_url, image_order) "
+            . "VALUES ({$pid}, '{$imageUrl}', {$idx})"
         );
     }
 

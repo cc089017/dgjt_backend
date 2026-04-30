@@ -50,7 +50,7 @@ $router->post('/api/auth/login', function () {
     $accessToken  = Jwt::createAccessToken((string)$user['user_id']);
     $refreshToken = Jwt::createRefreshToken((string)$user['user_id']);
 
-    $expiresAt = date('Y-m-d H:i:s', time() + 7 * 24 * 3600);
+    $expiresAt = date('Y-m-d H:i:s', time() + config('jwt')['refresh_expire']);
     $uidEsc = $user['user_id'];
     $db->exec(
         "INSERT INTO refresh_tokens (user_id, token, expires_at) "
