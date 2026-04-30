@@ -3,17 +3,9 @@ declare(strict_types=1);
 
 class Jwt
 {
-    private const ACCESS_EXPIRE  = 1800;    // 30분
-    private const REFRESH_EXPIRE = 604800;  // 7일
-
     private static function secret(): string
     {
-        $s = getenv('JWT_SECRET');
-        if ($s !== false && $s !== '') {
-            return $s;
-        }
-        // 운영에서는 반드시 환경변수로 교체할 것
-        return 'change-this-jwt-secret-in-production-please-use-long-random-string';
+        return config('jwt')['secret'];
     }
 
     public static function createAccessToken(string $userId): string
@@ -22,7 +14,7 @@ class Jwt
             'sub'  => $userId,
             'type' => 'access',
             'iat'  => time(),
-            'exp'  => time() + self::ACCESS_EXPIRE,
+            'exp'  => time() + config('jwt')['access_expire'],
         ]);
     }
 
@@ -32,7 +24,7 @@ class Jwt
             'sub'  => $userId,
             'type' => 'refresh',
             'iat'  => time(),
-            'exp'  => time() + self::REFRESH_EXPIRE,
+            'exp'  => time() + config('jwt')['refresh_expire'],
         ]);
     }
 

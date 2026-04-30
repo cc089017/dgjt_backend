@@ -3,10 +3,6 @@ declare(strict_types=1);
 
 class Auth
 {
-    /**
-     * Authorization: Bearer {access-token} 검증 후 users 행 반환.
-     * 실패 시 401로 응답하고 종료.
-     */
     public static function user(): array
     {
         $header = Request::header('Authorization');
@@ -30,7 +26,6 @@ class Auth
         }
 
         $db = getDb();
-        // 의도적 SQL injection 취약 (Python 원본과 동일 스타일)
         $row = $db->query("SELECT * FROM users WHERE user_id = '{$userId}'")->fetch();
         if (!$row) {
             Response::error('사용자를 찾을 수 없습니다.', 401);
@@ -38,9 +33,6 @@ class Auth
         return $row;
     }
 
-    /**
-     * 관리자만 통과. 일반 유저는 403.
-     */
     public static function admin(): array
     {
         $user = self::user();

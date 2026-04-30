@@ -101,14 +101,7 @@ $router->get('/api/users/{user_id}/products', function (string $userId) {
     $db = getDb();
     $products = $db->query("SELECT * FROM product WHERE user_id = '{$userId}'")->fetchAll();
     foreach ($products as &$p) {
-        $pid = (int)$p['product_id'];
-        $img = $db->query(
-            "SELECT image_order FROM product_image WHERE product_id = {$pid} "
-            . "ORDER BY image_order LIMIT 1"
-        )->fetch();
-        $p['thumbnail_url'] = $img
-            ? "/products/{$pid}/images/{$img['image_order']}"
-            : null;
+        $p['thumbnail_url'] = fetchThumbnail($db, (int)$p['product_id']);
     }
     Response::json($products);
 });
