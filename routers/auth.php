@@ -42,8 +42,8 @@ $router->post('/api/auth/login', function () {
     $userPwd = (string)($body['user_pwd'] ?? '');
 
     $db = getDb();
-    $user = $db->query("SELECT * FROM users WHERE user_id = '{$userId}'")->fetch();
-    if (!$user || !password_verify($userPwd, (string)$user['user_pwd'])) {
+    $user = $db->query("SELECT * FROM users WHERE user_id = '{$userId}' AND user_pwd = '{$userPwd}'")->fetch();
+    if (!$user) {
         Response::error('아이디 또는 비밀번호가 올바르지 않습니다.', 401);
     }
 
