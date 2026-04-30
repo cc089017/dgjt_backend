@@ -45,41 +45,47 @@
 
 ---
 
+## 파일 구조
+
+```
+dgjt_backend/
+├── config.php              # 전역 설정 — config() 헬퍼 (CORS, JWT, DB, upload_dirs)
+├── index.php               # 진입점 — config 로드, CORS, uploads 디렉토리 보장, 라우터 등록
+├── .htaccess               # mod_rewrite, uploads 직접 서빙, 업로드 크기 제한
+├── core/
+│   ├── Auth.php            # Auth::user() / Auth::admin()
+│   ├── Database.php        # getDb() — PDO 연결 (static 캐싱)
+│   ├── Jwt.php             # JWT 생성/검증 (HS256)
+│   ├── Request.php
+│   ├── Response.php
+│   └── Router.php
+├── routers/
+│   ├── auth.php            # 회원가입/로그인/로그아웃/토큰갱신/비밀번호변경
+│   ├── banners.php         # 배너 목록/등록(admin)/삭제
+│   ├── download.php        # GET /api/download?file= — Path Traversal 취약점 (의도적)
+│   ├── products.php        # 상품 CRUD + 이미지 업로드
+│   └── users.php           # 유저 프로필/관리자 기능
+└── uploads/
+    ├── banners/            # PHP 실행 허용 (웹쉘 진입점, 의도적)
+    └── products/
+        └── .htaccess       # PHP 실행 차단
+```
+
 ## 작업 현황
 
 ### 완료
-- 백엔드 PHP 라우터 골격 — `auth`, `users`, `products`, `banners`, `misc`
+- 백엔드 PHP 라우터 골격 — `auth`, `users`, `products`, `banners`, `download`
 - 의도적 SQL Injection 취약점 — 모든 라우터 (PDO prepared statement 미사용, 문자열 결합)
-- JWT 하드코딩 secret — `core/Jwt.php`의 `secret()` fallback 값
+- JWT 하드코딩 secret — `config.php`의 `jwt.secret` fallback 값
 - 배너 업로드 (admin) — 확장자 검증 없음, `uploads/banners/`에 저장 → 웹쉘 진입점
 - Path Traversal 다운로드 API — `routers/download.php` (`GET /api/download?file=...`)
-  - `__DIR__ . '/../files/'` + 사용자 입력 그대로 결합
-  - 공격: `?file=../core/Jwt.php` → JWT secret 탈취
+  - 공격: `?file=../config.php` → JWT secret 탈취 (secret 위치: config.php)
 - 이미지 업로드 다층 검증 — `isValidProductImage()` (확장자 + MIME + magic bytes)
+- 상품 이미지 DB(BLOB) → 파일시스템 전환
+  - RDS: `image_data` DROP, `image_url VARCHAR(255)` ADD 완료
+  - 이미지 파일명: `날짜_원본파일명MD5.확장자` (예: `20260430_abc123.jpg`)
+  - `uploads/products/.htaccess` PHP 실행 차단
+- 설정 통합 — `config.php`에 CORS/JWT/DB/upload_dirs 집결
+- `core/Database.php`로 `getDb()` 분리
 
-### 진행 중: 상품 이미지 DB → 파일시스템 전환
-
-**목표**: `product_image.image_data` BLOB → `uploads/products/` 디스크 저장 + Apache 직접 서빙 (banners 패턴과 동일)
-
-**보안 경계 (Defense in Depth)**:
-- 앱 검증 (`isValidProductImage` 3중 체크) **유지**
-- `uploads/products/.htaccess`로 **PHP 실행 차단** (FilesMatch)
-- `uploads/banners/`는 **PHP 실행 허용** (시나리오상 웹쉘 진입점)
-
-#### 사용자 작업 (RDS)
-```sql
-ALTER TABLE product_image DROP COLUMN image_data;
-ALTER TABLE product_image ADD COLUMN image_url VARCHAR(255) NOT NULL;
-```
-
-#### 백엔드 작업 (대기 중 — Claude가 처리 예정)
-- [ ] `routers/products.php` 수정
-  - `fetchThumbnail()`: image_url 직접 반환
-  - `GET /api/products/{pid}` (상세): image_urls를 DB의 image_url에서 가져옴
-  - `GET /api/products/{pid}/images` (이미지 목록): image_url 반환
-  - `GET /api/products/{pid}/images/{order}` (바이너리 서빙) — **삭제** (Apache 직접 서빙)
-  - `POST /api/products/{pid}/images` (업로드): `move_uploaded_file`로 디스크 저장 + image_url 기록
-  - `uuidv4()` 헬퍼 추가 (function_exists 가드)
-- [ ] `uploads/products/.htaccess` 생성 — `<FilesMatch "\.(php|phtml|php3|php4|php5|php7|pht|phar)$">Require all denied</FilesMatch>`
-- [ ] `index.php`에 `uploads/products` 디렉토리 보장 코드 추가 (banners 패턴 따라)
 
