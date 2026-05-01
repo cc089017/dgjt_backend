@@ -44,13 +44,6 @@ class Router
     {
         $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
         $uri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
-
-        // 스크립트가 서브 디렉토리에 있을 경우 base path 제거
-        $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
-        $basePath = rtrim(str_replace('\\', '/', dirname($scriptName)), '/');
-        if ($basePath !== '' && $basePath !== '/' && strpos($uri, $basePath) === 0) {
-            $uri = substr($uri, strlen($basePath));
-        }
         if ($uri === '' || $uri === false) {
             $uri = '/';
         }

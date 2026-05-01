@@ -7,12 +7,6 @@ function config(?string $key = null)
     if ($cfg === null) {
         $cfg = [
             'cors_origins' => [
-                'http://localhost:5173',
-                'http://127.0.0.1:5173',
-                'http://localhost:5174',
-                'http://127.0.0.1:5174',
-                'http://localhost:5175',
-                'http://127.0.0.1:5175',
                 'http://dgjt.duckdns.org',
                 'https://dgjt.duckdns.org',
             ],

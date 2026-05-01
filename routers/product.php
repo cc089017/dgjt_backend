@@ -6,13 +6,13 @@ declare(strict_types=1);
 // ===== 헬퍼 =====
 
 if (!function_exists('fetchThumbnail')) {
-    function fetchThumbnail(PDO $db, int $productId): ?string
+    function fetchThumbnail(PDO $db, int $productId): string
     {
         $img = $db->query(
             "SELECT image_url FROM product_image WHERE product_id = {$productId} "
             . "ORDER BY image_order LIMIT 1"
         )->fetch();
-        return $img ? $img['image_url'] : null;
+        return $img ? $img['image_url'] : '/uploads/basic_image.png';
     }
 }
 
@@ -160,7 +160,7 @@ $router->get('/api/products/{product_id}', function (string $productId) {
 
     $imageUrls = array_column($images, 'image_url');
 
-    $product['thumbnail_url']   = $imageUrls[0] ?? null;
+    $product['thumbnail_url']   = $imageUrls[0] ?? '/uploads/basic_image.png';
     $product['seller_nickname'] = $seller['nickname'] ?? '';
     $product['seller_region']   = $seller['region']   ?? '';
     $product['image_urls']      = $imageUrls;
@@ -289,6 +289,107 @@ $router->post('/api/products/{product_id}/images', function (string $productId) 
     }
 
     Response::json(['message' => count($files) . '개의 이미지가 업로드되었습니다.']);
+});
+
+// 댓글 목록
+$router->get('/api/products/{product_id}/comments', function (string $productId) {
+    $pid = (int)$productId;
+    $db = getDb();
+
+    if (!$db->query("SELECT product_id FROM product WHERE product_id = {$pid}")->fetch()) {
+        Response::error('상품을 찾을 수 없습니다.', 404);
+    }
+
+    $rows = $db->query(
+        "SELECT c.*, u.nickname FROM product_comment c "
+        . "JOIN users u ON c.user_id = u.user_id "
+        . "WHERE c.product_id = {$pid} ORDER BY c.created_at ASC"
+    )->fetchAll();
+
+    $map = [];
+    foreach ($rows as $r) {
+        $r['replies'] = [];
+        $map[(int)$r['comment_id']] = $r;
+    }
+    $result = [];
+    foreach ($map as $cid => $comment) {
+        $pid2 = $comment['parent_id'];
+        if ($pid2 === null) {
+            $result[] = &$map[$cid];
+        } else {
+            $map[(int)$pid2]['replies'][] = &$map[$cid];
+        }
+    }
+
+    Response::json(array_values($result));
+});
+
+// 댓글 작성
+$router->post('/api/products/{product_id}/comments', function (string $productId) {
+    $current = Auth::user();
+    $pid = (int)$productId;
+    $body = Request::jsonBody();
+    $content = (string)($body['content'] ?? '');
+    $parentId = isset($body['parent_comment_id']) ? (int)$body['parent_comment_id'] : null;
+
+    if ($content === '') {
+        Response::error('댓글 내용은 필수입니다.', 400);
+    }
+
+    $db = getDb();
+
+    if (!$db->query("SELECT product_id FROM product WHERE product_id = {$pid}")->fetch()) {
+        Response::error('상품을 찾을 수 없습니다.', 404);
+    }
+
+    if ($parentId !== null) {
+        $parent = $db->query(
+            "SELECT comment_id, parent_id FROM product_comment WHERE comment_id = {$parentId} AND product_id = {$pid}"
+        )->fetch();
+        if (!$parent) {
+            Response::error('부모 댓글을 찾을 수 없습니다.', 404);
+        }
+        if ($parent['parent_id'] !== null) {
+            Response::error('대댓글에는 답글을 달 수 없습니다.', 400);
+        }
+    }
+
+    $uid = $current['user_id'];
+    $parentSql = $parentId !== null ? (string)$parentId : 'NULL';
+    $db->exec(
+        "INSERT INTO product_comment (product_id, user_id, parent_id, content) "
+        . "VALUES ({$pid}, '{$uid}', {$parentSql}, '{$content}')"
+    );
+    $cid = (int)$db->lastInsertId();
+
+    $comment = $db->query(
+        "SELECT c.*, u.nickname FROM product_comment c "
+        . "JOIN users u ON c.user_id = u.user_id "
+        . "WHERE c.comment_id = {$cid}"
+    )->fetch();
+    $comment['replies'] = [];
+    Response::json($comment, 201);
+});
+
+// 댓글 삭제
+$router->delete('/api/products/{product_id}/comments/{comment_id}', function (string $productId, string $commentId) {
+    $current = Auth::user();
+    $pid = (int)$productId;
+    $cid = (int)$commentId;
+
+    $db = getDb();
+    $comment = $db->query(
+        "SELECT * FROM product_comment WHERE comment_id = {$cid} AND product_id = {$pid}"
+    )->fetch();
+    if (!$comment) {
+        Response::error('댓글을 찾을 수 없습니다.', 404);
+    }
+    if ($comment['user_id'] !== $current['user_id'] && empty($current['is_admin'])) {
+        Response::error('삭제 권한이 없습니다.', 403);
+    }
+
+    $db->exec("DELETE FROM product_comment WHERE comment_id = {$cid}");
+    Response::json(['message' => '댓글이 삭제되었습니다.']);
 });
 
 // 상태 변경

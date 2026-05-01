@@ -15,6 +15,17 @@ $router->get('/api/banners', function () {
     Response::json($banners);
 });
 
+// 전체 배너 목록 (관리자)
+$router->get('/api/banners/all', function () {
+    Auth::admin();
+    $db = getDb();
+    $banners = $db->query("SELECT * FROM banners ORDER BY id DESC")->fetchAll();
+    foreach ($banners as &$b) {
+        $b['is_active'] = (bool)$b['is_active'];
+    }
+    Response::json($banners);
+});
+
 // 배너 등록 (관리자, multipart)
 $router->post('/api/banners', function () {
     Auth::admin();
@@ -54,6 +65,22 @@ $router->post('/api/banners', function () {
         $banner['is_active'] = (bool)$banner['is_active'];
     }
     Response::json($banner);
+});
+
+// 배너 활성화 토글 (관리자)
+$router->patch('/api/banners/{banner_id}', function (string $bannerId) {
+    Auth::admin();
+    $bid = (int)$bannerId;
+    $db = getDb();
+    $banner = $db->query("SELECT * FROM banners WHERE id = {$bid}")->fetch();
+    if (!$banner) {
+        Response::error('배너를 찾을 수 없습니다.', 404);
+    }
+    $newStatus = $banner['is_active'] ? 0 : 1;
+    $db->exec("UPDATE banners SET is_active = {$newStatus} WHERE id = {$bid}");
+    $updated = $db->query("SELECT * FROM banners WHERE id = {$bid}")->fetch();
+    $updated['is_active'] = (bool)$updated['is_active'];
+    Response::json($updated);
 });
 
 // 배너 삭제 (관리자)

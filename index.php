@@ -51,7 +51,7 @@ require_once __DIR__ . '/core/Auth.php';
 $router = new Router();
 
 // 헬스체크
-$router->get('/', function () {
+$router->get('/api', function () {
     Response::json(['status' => 'ok', 'message' => '서버가 정상 실행 중입니다.']);
 });
 

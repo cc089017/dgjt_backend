@@ -6,13 +6,13 @@ declare(strict_types=1);
 // ===== 헬퍼 =====
 
 if (!function_exists('fetchShareThumbnail')) {
-    function fetchShareThumbnail(PDO $db, int $shareId): ?string
+    function fetchShareThumbnail(PDO $db, int $shareId): string
     {
         $img = $db->query(
             "SELECT image_url FROM share_image WHERE share_id = {$shareId} "
             . "ORDER BY image_order LIMIT 1"
         )->fetch();
-        return $img ? $img['image_url'] : null;
+        return $img ? $img['image_url'] : '/uploads/basic_image.png';
     }
 }
 
@@ -61,7 +61,7 @@ $router->post('/api/shares', function () {
     $shareId = (int)$db->lastInsertId();
 
     $share = $db->query("SELECT * FROM share WHERE share_id = {$shareId}")->fetch();
-    $share['thumbnail_url'] = null;
+    $share['thumbnail_url'] = '/uploads/basic_image.png';
     Response::json($share, 201);
 });
 
@@ -93,7 +93,7 @@ $router->get('/api/shares/{share_id}', function (string $shareId) {
 
     $imageUrls = array_column($images, 'image_url');
 
-    $share['thumbnail_url']   = $imageUrls[0] ?? null;
+    $share['thumbnail_url']   = $imageUrls[0] ?? '/uploads/basic_image.png';
     $share['seller_nickname'] = $seller['nickname'] ?? '';
     $share['seller_region']   = $seller['region']   ?? '';
     $share['image_urls']      = $imageUrls;
@@ -217,6 +217,107 @@ $router->post('/api/shares/{share_id}/images', function (string $shareId) {
     }
 
     Response::json(['message' => count($files) . '개의 이미지가 업로드되었습니다.']);
+});
+
+// 댓글 목록
+$router->get('/api/shares/{share_id}/comments', function (string $shareId) {
+    $sid = (int)$shareId;
+    $db = getDb();
+
+    if (!$db->query("SELECT share_id FROM share WHERE share_id = {$sid}")->fetch()) {
+        Response::error('나눔을 찾을 수 없습니다.', 404);
+    }
+
+    $rows = $db->query(
+        "SELECT c.*, u.nickname FROM share_comment c "
+        . "JOIN users u ON c.user_id = u.user_id "
+        . "WHERE c.share_id = {$sid} ORDER BY c.created_at ASC"
+    )->fetchAll();
+
+    $map = [];
+    foreach ($rows as $r) {
+        $r['replies'] = [];
+        $map[(int)$r['comment_id']] = $r;
+    }
+    $result = [];
+    foreach ($map as $cid => $comment) {
+        $pid = $comment['parent_id'];
+        if ($pid === null) {
+            $result[] = &$map[$cid];
+        } else {
+            $map[(int)$pid]['replies'][] = &$map[$cid];
+        }
+    }
+
+    Response::json(array_values($result));
+});
+
+// 댓글 작성
+$router->post('/api/shares/{share_id}/comments', function (string $shareId) {
+    $current = Auth::user();
+    $sid = (int)$shareId;
+    $body = Request::jsonBody();
+    $content = (string)($body['content'] ?? '');
+    $parentId = isset($body['parent_comment_id']) ? (int)$body['parent_comment_id'] : null;
+
+    if ($content === '') {
+        Response::error('댓글 내용은 필수입니다.', 400);
+    }
+
+    $db = getDb();
+
+    if (!$db->query("SELECT share_id FROM share WHERE share_id = {$sid}")->fetch()) {
+        Response::error('나눔을 찾을 수 없습니다.', 404);
+    }
+
+    if ($parentId !== null) {
+        $parent = $db->query(
+            "SELECT comment_id, parent_id FROM share_comment WHERE comment_id = {$parentId} AND share_id = {$sid}"
+        )->fetch();
+        if (!$parent) {
+            Response::error('부모 댓글을 찾을 수 없습니다.', 404);
+        }
+        if ($parent['parent_id'] !== null) {
+            Response::error('대댓글에는 답글을 달 수 없습니다.', 400);
+        }
+    }
+
+    $uid = $current['user_id'];
+    $parentSql = $parentId !== null ? (string)$parentId : 'NULL';
+    $db->exec(
+        "INSERT INTO share_comment (share_id, user_id, parent_id, content) "
+        . "VALUES ({$sid}, '{$uid}', {$parentSql}, '{$content}')"
+    );
+    $cid = (int)$db->lastInsertId();
+
+    $comment = $db->query(
+        "SELECT c.*, u.nickname FROM share_comment c "
+        . "JOIN users u ON c.user_id = u.user_id "
+        . "WHERE c.comment_id = {$cid}"
+    )->fetch();
+    $comment['replies'] = [];
+    Response::json($comment, 201);
+});
+
+// 댓글 삭제
+$router->delete('/api/shares/{share_id}/comments/{comment_id}', function (string $shareId, string $commentId) {
+    $current = Auth::user();
+    $sid = (int)$shareId;
+    $cid = (int)$commentId;
+
+    $db = getDb();
+    $comment = $db->query(
+        "SELECT * FROM share_comment WHERE comment_id = {$cid} AND share_id = {$sid}"
+    )->fetch();
+    if (!$comment) {
+        Response::error('댓글을 찾을 수 없습니다.', 404);
+    }
+    if ($comment['user_id'] !== $current['user_id'] && empty($current['is_admin'])) {
+        Response::error('삭제 권한이 없습니다.', 403);
+    }
+
+    $db->exec("DELETE FROM share_comment WHERE comment_id = {$cid}");
+    Response::json(['message' => '댓글이 삭제되었습니다.']);
 });
 
 // 상태 변경

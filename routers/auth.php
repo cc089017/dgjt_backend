@@ -23,10 +23,9 @@ $router->post('/api/auth/register', function () {
         Response::error('이미 사용 중인 아이디입니다.', 409);
     }
 
-    $hashed = password_hash($userPwd, PASSWORD_BCRYPT, ['cost' => 12]);
     $db->exec(
         "INSERT INTO users (user_id, user_pwd, nickname, phone_num, email, region) "
-        . "VALUES ('{$userId}', '{$hashed}', '{$nickname}', '{$phoneNum}', '{$email}', '{$region}')"
+        . "VALUES ('{$userId}', '{$userPwd}', '{$nickname}', '{$phoneNum}', '{$email}', '{$region}')"
     );
 
     Response::json([
@@ -105,8 +104,30 @@ $router->post('/api/auth/refresh', function () {
         Response::error('이미 무효화된 토큰입니다. 다시 로그인 해주세요.', 401);
     }
 
-    $newAccess = Jwt::createAccessToken($userId);
+    $isAdmin = (bool)$db->query("SELECT user_id FROM admin WHERE user_id = '{$userId}'")->fetch();
+    $newAccess = Jwt::createAccessToken($userId, $isAdmin);
     Response::json(['access_token' => $newAccess]);
+});
+
+// 비밀번호 찾기 (아이디 + 이메일 확인 후 재설정)
+$router->post('/api/auth/password/reset', function () {
+    $body = Request::jsonBody();
+    $userId = (string)($body['user_id'] ?? '');
+    $email  = (string)($body['email']   ?? '');
+    $newPwd = (string)($body['new_pwd'] ?? '');
+
+    if ($userId === '' || $email === '' || $newPwd === '') {
+        Response::error('아이디, 이메일, 새 비밀번호는 필수입니다.', 400);
+    }
+
+    $db = getDb();
+    $user = $db->query("SELECT user_id FROM users WHERE user_id = '{$userId}' AND email = '{$email}'")->fetch();
+    if (!$user) {
+        Response::error('아이디 또는 이메일이 일치하지 않습니다.', 404);
+    }
+
+    $db->exec("UPDATE users SET user_pwd = '{$newPwd}' WHERE user_id = '{$userId}'");
+    Response::json(['message' => '비밀번호가 재설정되었습니다.']);
 });
 
 // 비밀번호 변경
@@ -116,16 +137,16 @@ $router->put('/api/auth/password/change', function () {
     $currentPwd = (string)($body['current_pwd'] ?? '');
     $newPwd     = (string)($body['new_pwd']     ?? '');
 
-    if (!password_verify($currentPwd, (string)$current['user_pwd'])) {
+    if ($currentPwd !== (string)$current['user_pwd']) {
         Response::error('현재 비밀번호가 올바르지 않습니다.', 400);
     }
     if ($currentPwd === $newPwd) {
         Response::error('새 비밀번호가 현재 비밀번호와 동일합니다.', 400);
     }
 
-    $newHashed = password_hash($newPwd, PASSWORD_BCRYPT, ['cost' => 12]);
+    $uid = (string)$current['user_id'];
     $db = getDb();
-    $db->exec("UPDATE users SET user_pwd = '{$newHashed}' WHERE user_id = '{$current['user_id']}'");
+    $db->exec("UPDATE users SET user_pwd = '{$newPwd}' WHERE user_id = '{$uid}'");
 
     Response::json(['message' => '비밀번호가 성공적으로 변경되었습니다.']);
 });

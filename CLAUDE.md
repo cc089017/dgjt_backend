@@ -51,30 +51,56 @@
 dgjt_backend/
 ├── config.php              # 전역 설정 — config() 헬퍼 (CORS, JWT, DB, upload_dirs)
 ├── index.php               # 진입점 — config 로드, CORS, uploads 디렉토리 보장, 라우터 등록
-├── .htaccess               # mod_rewrite, uploads 직접 서빙, 업로드 크기 제한
+├── .htaccess               # PHP upload 크기 제한만 (rewrite 규칙은 Apache 설정으로 이동)
 ├── core/
 │   ├── Auth.php            # Auth::user() / Auth::admin()
 │   ├── Database.php        # getDb() — PDO 연결 (static 캐싱)
 │   ├── Jwt.php             # JWT 생성/검증 (HS256)
 │   ├── Request.php
 │   ├── Response.php
-│   └── Router.php
+│   └── Router.php          # base path 자동 제거 로직 삭제 — Alias 환경에서 오작동하므로
 ├── routers/
 │   ├── auth.php            # 회원가입/로그인/로그아웃/토큰갱신/비밀번호변경
 │   ├── banners.php         # 배너 목록/등록(admin)/삭제
 │   ├── download.php        # GET /api/download?file= — Path Traversal 취약점 (의도적)
 │   ├── product.php         # 상품 CRUD + 이미지 업로드
+│   ├── share.php           # 나눔 CRUD + 이미지 업로드
 │   └── users.php           # 유저 프로필/관리자 기능
 └── uploads/
     ├── banners/            # PHP 실행 허용 (웹쉘 진입점, 의도적)
-    └── products/
+    ├── products/
+    │   └── .htaccess       # PHP 실행 차단
+    └── shares/
         └── .htaccess       # PHP 실행 차단
 ```
+
+## 인프라 배포 현황
+
+### WAS (Ubuntu, Apache)
+- 경로: `/var/www/html/`
+  - `frontend/` — 정적 파일 (HTML/JS/CSS)
+  - `backend/` — PHP 백엔드
+- Apache 설정: `/etc/apache2/sites-available/dgjt.conf`
+  - `DocumentRoot /var/www/html/frontend`
+  - `Alias /api /var/www/html/backend` — API 요청 라우팅
+  - `Alias /uploads /var/www/html/backend/uploads`
+  - DB 접속 정보는 `SetEnv`로 주입 (dgjt.conf 내)
+  - RewriteRule은 `.htaccess`가 아닌 `<Directory>` 블록 안에 정의
+    - `.htaccess`의 RewriteEngine이 모든 요청을 가로채는 문제 때문에 이동
+- 포트: Apache 8080, nginx(WEB)가 리버스 프록시로 전달
+
+### WEB (nginx)
+- 도메인: `dgjt.duckdns.org`
+- 모든 요청을 WAS `10.11.10.82:8080`으로 프록시
+
+### RDS
+- 엔드포인트: `db-ksj16.cfa620y6u0rh.ap-northeast-2.rds.amazonaws.com`
+- DB명: `secondhand_platform`
 
 ## 작업 현황
 
 ### 완료
-- 백엔드 PHP 라우터 골격 — `auth`, `users`, `products`, `banners`, `download`
+- 백엔드 PHP 라우터 골격 — `auth`, `users`, `product`, `banners`, `share`, `download`
 - 의도적 SQL Injection 취약점 — 모든 라우터 (PDO prepared statement 미사용, 문자열 결합)
 - JWT 하드코딩 secret — `config.php`의 `jwt.secret` fallback 값
 - 배너 업로드 (admin) — 확장자 검증 없음, `uploads/banners/`에 저장 → 웹쉘 진입점
@@ -85,11 +111,17 @@ dgjt_backend/
   - RDS: `image_data` DROP, `image_url VARCHAR(255)` ADD 완료
   - 이미지 파일명: `날짜_원본파일명MD5.확장자` (예: `20260430_abc123.jpg`)
   - `uploads/products/.htaccess` PHP 실행 차단
-- 설정 통합 — `config.php`에 CORS/JWT/DB/upload_dirs 집결
+- 설정 통합 — `config.php`에 CORS/JWT/DB/upload_dirs 집결 (localhost CORS 제거 완료)
 - `core/Database.php`로 `getDb()` 분리
+  - `Pdo\Mysql::ATTR_INIT_COMMAND` → `PDO::MYSQL_ATTR_INIT_COMMAND` 수정 (PHP 버전 호환)
 - admin 권한 체계 개편
   - RDS: `users.is_admin` 컬럼 DROP, `admin` 테이블(user_id PK) 별도 운영
   - 로그인 시 `admin` 테이블 조회 → JWT payload에 `is_admin` 포함
   - `Auth::admin()` — DB 조회 없이 JWT payload의 `is_admin` 확인
   - 공격 시나리오: secret 탈취 후 `is_admin: true`로 JWT 위조 → admin 접근
+- `share` 기능 추가 — `routers/share.php`, `uploads/shares/`, RDS 테이블 생성
+- AWS 클라우드 배포 완료
+  - Router.php base path 자동 제거 로직 삭제 (Alias 환경에서 `/api` prefix를 잘못 제거하던 버그)
+  - 헬스체크 라우트: `'/'` → `'/api'`로 변경
+  - Apache RewriteRule을 `.htaccess`에서 `dgjt.conf <Directory>` 블록으로 이동
 

@@ -17,6 +17,17 @@ $router->get('/api/users/me', function () {
     Response::json($user);
 });
 
+// 닉네임 중복 검사
+$router->get('/api/users/check-nickname', function () {
+    $nickname = (string)(Request::query('nickname', ''));
+    if ($nickname === '') {
+        Response::error('닉네임을 입력해주세요.', 400);
+    }
+    $db = getDb();
+    $exists = $db->query("SELECT user_id FROM users WHERE nickname = '{$nickname}'")->fetch();
+    Response::json(['available' => !$exists]);
+});
+
 // 내 프로필 수정
 $router->patch('/api/users/me', function () {
     $current = Auth::user();

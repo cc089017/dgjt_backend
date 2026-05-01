@@ -30,6 +30,7 @@ class Auth
         if (!$row) {
             Response::error('사용자를 찾을 수 없습니다.', 401);
         }
+        $row['is_admin'] = !empty($payload['is_admin']);
         return $row;
     }
 
